@@ -2,82 +2,122 @@
 
 namespace Algolia\AlgoliaSearch\Adapter\Aggregation;
 
+use Algolia\AlgoliaSearch\Model\Indexer\Product;
+use Algolia\AlgoliaSearch\Helper\ElasticAdapterHelper;
 use Magento\Catalog\Model\ProductFactory;
-use Magento\Framework\App\ResourceConnection;
-use Magento\Framework\DB\Ddl\Table;
-use Magento\Framework\Search\Adapter\Aggregation\AggregationResolverInterface;
-use Magento\Framework\Search\Adapter\Mysql\Aggregation\Builder\Container as AggregationContainer;
-use Magento\Framework\Search\Adapter\Mysql\Aggregation\DataProviderContainer;
-use Magento\Framework\Search\Adapter\Mysql\TemporaryStorage;
+use Magento\Elasticsearch\SearchAdapter\Aggregation\Builder as ElasticSearchBuilder;
+use Magento\Elasticsearch\SearchAdapter\Aggregation\Builder\BucketBuilderInterface;
+use Magento\Elasticsearch\SearchAdapter\Aggregation\DataProviderFactory;
+use Magento\Elasticsearch\SearchAdapter\QueryContainer;
 use Magento\Framework\Search\RequestInterface;
+use Magento\Framework\Search\Dynamic\DataProviderInterface;
+use Magento\Elasticsearch\SearchAdapter\Aggregation\Builder as NativeBuilder;
 
-class Builder
+/**
+ * This is a prototype to make application compileable. Should not be used in production system.
+ *
+ * @TODO: Remove / refactor this prototype class.
+ * @see \Magento\Elasticsearch\SearchAdapter\Aggregation\Builder
+ */
+class Builder extends NativeBuilder
 {
-    /** @var DataProviderContainer */
+    /**
+     * @var DataProviderInterface[]
+     */
     private $dataProviderContainer;
 
-    /** @var AggregationContainer */
+    /**
+     * @var BucketBuilderInterface[]
+     */
     private $aggregationContainer;
 
-    /** @var ResourceConnection */
-    private $resource;
+    /**
+     * @var DataProviderFactory
+     */
+    private $dataProviderFactory;
 
-    /** @var AggregationResolverInterface */
-    private $aggregationResolver;
+    /**
+     * @var QueryContainer
+     */
+    private $query;
 
-    /** @var ProductFactory */
+    /**
+     * @var ProductFactory
+     */
     private $productFactory;
 
     /**
-     * @param ResourceConnection $resource
-     * @param DataProviderContainer $dataProviderContainer
-     * @param AggregationContainer $aggregationContainer
-     * @param AggregationResolverInterface $aggregationResolver
+     * @var \Magento\Catalog\Model\Product
+     */
+    private $product;
+
+    /**
+     * @var array
+     */
+    private $facets = [];
+
+    /**
+     * @param DataProviderInterface[] $dataProviderContainer
+     * @param BucketBuilderInterface[] $aggregationContainer
+     * @param DataProviderFactory|null $dataProviderFactory
      * @param ProductFactory $productFactory
      */
     public function __construct(
-        ResourceConnection $resource,
-        DataProviderContainer $dataProviderContainer,
-        AggregationContainer $aggregationContainer,
-        AggregationResolverInterface $aggregationResolver,
-        ProductFactory $productFactory
+        array $dataProviderContainer,
+        array $aggregationContainer,
+        DataProviderFactory $dataProviderFactory,
+        ProductFactory $productFactory = null
     ) {
-        $this->dataProviderContainer = $dataProviderContainer;
-        $this->aggregationContainer = $aggregationContainer;
-        $this->resource = $resource;
-        $this->aggregationResolver = $aggregationResolver;
+        $this->dataProviderContainer = array_map(
+            static function (DataProviderInterface $dataProvider) {
+                return $dataProvider;
+            },
+            $dataProviderContainer
+        );
+        $this->aggregationContainer = array_map(
+            static function (BucketBuilderInterface $bucketBuilder) {
+                return $bucketBuilder;
+            },
+            $aggregationContainer
+        );
+        $this->dataProviderFactory = $dataProviderFactory;
         $this->productFactory = $productFactory;
+
+        parent::__construct($dataProviderContainer, $aggregationContainer, $dataProviderFactory);
     }
 
-    public function build(RequestInterface $request, Table $documentsTable, array $documents, array $facets)
-    {
-        return $this->processAggregations($request, $documentsTable, $documents, $facets);
-    }
-
-    private function processAggregations(RequestInterface $request, Table $documentsTable, $documents, $facets)
+    public function build(RequestInterface $request, array $queryResult)
     {
         $aggregations = [];
-        $documentIds = $documents ? $this->extractDocumentIds($documents) : $this->getDocumentIds($documentsTable);
-        $buckets = $this->aggregationResolver->resolve($request, $documentIds);
-        $dataProvider = $this->dataProviderContainer->get($request->getIndex());
+        $buckets = $request->getAggregation();
+
+        $facets = $this->getFacets();
+
+        $dataProvider = $this->dataProviderFactory->create(
+            $this->dataProviderContainer[$request->getIndex()],
+            $this->query
+        );
 
         foreach ($buckets as $bucket) {
-            if (isset($facets[$bucket->getField()])) {
+            if (count($facets) && isset($facets[$bucket->getField()])) {
                 $aggregations[$bucket->getName()] =
                     $this->formatAggregation($bucket->getField(), $facets[$bucket->getField()]);
             } else {
-                $aggregationBuilder = $this->aggregationContainer->get($bucket->getType());
-                $aggregations[$bucket->getName()] = $aggregationBuilder->build(
-                    $dataProvider,
-                    $request->getDimensions(),
+                $bucketAggregationBuilder = $this->aggregationContainer[$bucket->getType()];
+                $aggregations[$bucket->getName()] = $bucketAggregationBuilder->build(
                     $bucket,
-                    $documentsTable
+                    $request->getDimensions(),
+                    $queryResult,
+                    $dataProvider
                 );
             }
         }
 
+        $this->query = null;
+
         return $aggregations;
     }
+
 
     private function formatAggregation($attribute, $facetData)
     {
@@ -96,7 +136,7 @@ class Builder
 
     private function getOptionIdByLabel($attributeCode, $optionLabel)
     {
-        $product = $this->productFactory->create();
+        $product = $this->getProduct();
         $isAttributeExist = $product->getResource()->getAttribute($attributeCode);
         $optionId = '';
         if ($isAttributeExist && $isAttributeExist->usesSource()) {
@@ -106,22 +146,38 @@ class Builder
         return $optionId;
     }
 
-    private function extractDocumentIds(array $documents)
+    /**
+     * @return \Magento\Catalog\Model\Product
+     */
+    private function getProduct()
     {
-        return $documents ? array_keys($documents) : [];
+        if (!$this->product) {
+            $this->product = $this->productFactory->create();
+        }
+
+        return $this->product;
     }
 
-    private function getDocumentIds(Table $documentsTable)
+    /**
+     * Sets the QueryContainer instance to the internal property in order to use it in build process
+     *
+     * @param QueryContainer $query
+     * @return $this
+     */
+    public function setQuery(QueryContainer $query)
     {
-        $select = $this->getConnection()
-            ->select()
-            ->from($documentsTable->getName(), TemporaryStorage::FIELD_ENTITY_ID);
+        $this->query = $query;
 
-        return $this->getConnection()->fetchCol($select);
+        return $this;
     }
 
-    private function getConnection()
+    public function setFacets($facets)
     {
-        return $this->resource->getConnection();
+        $this->facets = $facets;
+    }
+
+    private function getFacets()
+    {
+        return $this->facets;
     }
 }

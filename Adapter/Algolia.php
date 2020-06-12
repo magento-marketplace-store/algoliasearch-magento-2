@@ -5,85 +5,82 @@ namespace Algolia\AlgoliaSearch\Adapter;
 use Algolia\AlgoliaSearch\Adapter\Aggregation\Builder as AlgoliaAggregationBuilder;
 use Algolia\AlgoliaSearch\Helper\AdapterHelper;
 use AlgoliaSearch\AlgoliaConnectionException;
-use Magento\Framework\App\ResourceConnection;
-use Magento\Framework\DB\Ddl\Table;
-use Magento\Framework\DB\Select;
-use Magento\Framework\Search\Adapter\Mysql\Aggregation\Builder as AggregationBuilder;
-use Magento\Framework\Search\Adapter\Mysql\DocumentFactory;
-use Magento\Framework\Search\Adapter\Mysql\Mapper;
-use Magento\Framework\Search\Adapter\Mysql\ResponseFactory;
-use Magento\Framework\Search\Adapter\Mysql\TemporaryStorageFactory;
+use Magento\Elasticsearch\SearchAdapter\Aggregation\Builder as AggregationBuilder;
+use Magento\Elasticsearch\SearchAdapter\ConnectionManager;
+use Magento\Elasticsearch\SearchAdapter\QueryContainerFactory;
+use Magento\Elasticsearch\SearchAdapter\ResponseFactory;
 use Magento\Framework\Search\AdapterInterface;
 use Magento\Framework\Search\RequestInterface;
+use Magento\Elasticsearch7\SearchAdapter\Adapter as NativeAdapter;
+use Magento\Framework\Search\Response\QueryResponse;
+use Magento\Elasticsearch7\SearchAdapter\Mapper;
+use Psr\Log\LoggerInterface;
 
 /**
  * Algolia Search Adapter
  */
-class Algolia implements AdapterInterface
+class Algolia extends NativeAdapter implements AdapterInterface
 {
-    /** @var Mapper */
-    private $mapper;
-
-    /** @var ResponseFactory */
+    /**
+     * @var ResponseFactory
+     */
     private $responseFactory;
 
-    /** @var ResourceConnection */
-    private $resource;
-
-    /** @var AggregationBuilder */
-    private $aggregationBuilder;
-
-    /** @var TemporaryStorageFactory */
-    private $temporaryStorageFactory;
-
-    /** @var AdapterHelper */
+    /**
+     * @var AdapterHelper
+     */
     private $adapterHelper;
 
-    /** @var AlgoliaAggregationBuilder */
+    /**
+     * @var AlgoliaAggregationBuilder
+     */
     private $algoliaAggregationBuilder;
 
-    /** @var DocumentFactory */
-    private $documentFactory;
-
-    private $countSqlSkipParts = [
-        Select::LIMIT_COUNT => true,
-        Select::LIMIT_OFFSET => true,
-    ];
+    /**
+     * @var Mapper
+     */
+    private $mapper;
 
     /**
-     * @param Mapper $mapper
+     * @var QueryContainerFactory
+     */
+    private $queryContainerFactory;
+
+    /**
      * @param ResponseFactory $responseFactory
-     * @param ResourceConnection $resource
-     * @param AggregationBuilder $aggregationBuilder
-     * @param TemporaryStorageFactory $temporaryStorageFactory
+     * @param Mapper $mapper
      * @param AdapterHelper $adapterHelper
      * @param AlgoliaAggregationBuilder $algoliaAggregationBuilder
-     * @param DocumentFactory $documentFactory
      */
     public function __construct(
+        ConnectionManager $connectionManager,
         Mapper $mapper,
         ResponseFactory $responseFactory,
-        ResourceConnection $resource,
-        AggregationBuilder $aggregationBuilder,
-        TemporaryStorageFactory $temporaryStorageFactory,
-        AdapterHelper $adapterHelper,
-        AlgoliaAggregationBuilder $algoliaAggregationBuilder,
-        DocumentFactory $documentFactory
+        AlgoliaAggregationBuilder $aggregationBuilder,
+        QueryContainerFactory $queryContainerFactory,
+        LoggerInterface $logger,
+        AdapterHelper $adapterHelper
     ) {
-        $this->mapper = $mapper;
         $this->responseFactory = $responseFactory;
-        $this->resource = $resource;
-        $this->aggregationBuilder = $aggregationBuilder;
-        $this->temporaryStorageFactory = $temporaryStorageFactory;
+        $this->mapper = $mapper;
         $this->adapterHelper = $adapterHelper;
-        $this->algoliaAggregationBuilder = $algoliaAggregationBuilder;
-        $this->documentFactory = $documentFactory;
+        $this->algoliaAggregationBuilder = $aggregationBuilder;
+        $this->queryContainerFactory = $queryContainerFactory;
+
+        parent::__construct(
+            $connectionManager,
+            $mapper,
+            $responseFactory,
+            $aggregationBuilder,
+            $queryContainerFactory,
+            $logger
+        );
     }
 
     /**
      * {@inheritdoc}
      */
-    public function query(RequestInterface $request)
+    public function query(RequestInterface $request): QueryResponse
     {
         if (!$this->adapterHelper->isAllowed()
             || !(
@@ -96,28 +93,28 @@ class Algolia implements AdapterInterface
             return $this->nativeQuery($request);
         }
 
-        $temporaryStorage = $this->temporaryStorageFactory->create();
-        $documents = [];
+        $query = $this->mapper->buildQuery($request);
+        $this->algoliaAggregationBuilder->setQuery($this->queryContainerFactory->create(['query' => $query]));
+
+        $rawResponse = [];
         $totalHits = 0;
         $table = null;
-        $facetsFromAlgolia = null;
 
         try {
             // If instant search is on, do not make a search query unless SEO request is set to 'Yes'
             if (!$this->adapterHelper->isInstantEnabled() || $this->adapterHelper->makeSeoRequest()) {
                 list($documents, $totalHits, $facetsFromAlgolia) = $this->adapterHelper->getDocumentsFromAlgolia();
+                $rawResponse = $this->transformResponseForElastic($rawResponse);
             }
-
-            $apiDocuments = array_map([$this, 'getApiDocument'], $documents);
-            $table = $temporaryStorage->storeApiDocuments($apiDocuments);
         } catch (AlgoliaConnectionException $e) {
             return $this->nativeQuery($request);
         }
 
-        $aggregations = $this->algoliaAggregationBuilder->build($request, $table, $documents, $facetsFromAlgolia);
+        $this->algoliaAggregationBuilder->setFacets($facetsFromAlgolia);
+        $aggregations = $this->algoliaAggregationBuilder->build($request, $rawResponse);
 
         $response = [
-            'documents' => $documents,
+            'documents' => $rawResponse,
             'aggregations' => $aggregations,
             'total' => $totalHits,
         ];
@@ -125,87 +122,25 @@ class Algolia implements AdapterInterface
         return $this->responseFactory->create($response);
     }
 
-    private function nativeQuery(RequestInterface $request)
+    private function nativeQuery($request)
     {
-        $query = $this->mapper->buildQuery($request);
-        $temporaryStorage = $this->temporaryStorageFactory->create();
-        $table = $temporaryStorage->storeDocumentsFromSelect($query);
-
-        $documents = $this->getDocuments($table);
-
-        $aggregations = $this->aggregationBuilder->build($request, $table, $documents);
-        $response = [
-            'documents' => $documents,
-            'aggregations' => $aggregations,
-            'total' => $this->getSize($query),
-        ];
-
-        return $this->responseFactory->create($response);
-    }
-
-    private function getApiDocument($document)
-    {
-        return $this->documentFactory->create($document);
+        return parent::query($request);
     }
 
     /**
-     * Executes query and return raw response
-     *
-     * @param Table $table
-     *
-     * @throws \Zend_Db_Exception
-     *
+     * @param array $rawResponse
      * @return array
      */
-    private function getDocuments(Table $table)
+    private function transformResponseForElastic(array $rawResponse)
     {
-        $connection = $this->getConnection();
-        $select = $connection->select();
-        $select->from($table->getName(), ['entity_id', 'score']);
-
-        return $connection->fetchAssoc($select);
-    }
-
-    /** @return \Magento\Framework\DB\Adapter\AdapterInterface */
-    private function getConnection()
-    {
-        return $this->resource->getConnection();
-    }
-
-    /**
-     * Get rows size
-     *
-     * @param Select $query
-     *
-     * @return int
-     */
-    private function getSize(Select $query)
-    {
-        $sql = $this->getSelectCountSql($query);
-        $parentSelect = $this->getConnection()->select();
-        $parentSelect->from(['core_select' => $sql]);
-        $parentSelect->reset(Select::COLUMNS);
-        $parentSelect->columns('COUNT(*)');
-        $totalRecords = $this->getConnection()->fetchOne($parentSelect);
-
-        return (int) $totalRecords;
-    }
-
-    /**
-     * Reset limit and offset
-     *
-     * @param Select $query
-     *
-     * @return Select
-     */
-    private function getSelectCountSql(Select $query)
-    {
-        foreach ($this->countSqlSkipParts as $part => $toSkip) {
-            if ($toSkip) {
-                $query->reset($part);
+        if (count($rawResponse) > 0) {
+            foreach ($rawResponse as &$hit) {
+                $hit['_id'] = $hit['entity_id'];
             }
         }
 
-        return $query;
+        $rawResponse['hits'] = ['hits' => $rawResponse];
+
+        return $rawResponse;
     }
 }
