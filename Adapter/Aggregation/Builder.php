@@ -66,7 +66,7 @@ class Builder extends NativeBuilder
         array $dataProviderContainer,
         array $aggregationContainer,
         DataProviderFactory $dataProviderFactory,
-        ProductFactory $productFactory = null
+        ProductFactory $productFactory
     ) {
         $this->dataProviderContainer = array_map(
             static function (DataProviderInterface $dataProvider) {
