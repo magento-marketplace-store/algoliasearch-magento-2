@@ -117,4 +117,9 @@
             <argument name="imageUploader" xsi:type="object">Algolia\AlgoliaSearch\QueryImageUpload</argument>
         </arguments>
     </type>
+    <type name="Algolia\AlgoliaSearch\Helper\ConfigHelper">
+        <arguments>
+            <argument name="serializer" xsi:type="object">Magento\Framework\Serialize\Serializer\Serialize</argument>
+        </arguments>
+    </type>
 </config>
