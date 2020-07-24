@@ -19,7 +19,7 @@
     </type>
 
     <!-- Prototype -->
-    <preference for="Magento\Elasticsearch7\SearchAdapter\Adapter" type="Algolia\AlgoliaSearch\Adapter\Algolia" />
+    <preference for="Magento\Elasticsearch\Elasticsearch5\SearchAdapter\Adapter" type="Algolia\AlgoliaSearch\Adapter\Algolia" />
     <preference for="Magento\Elasticsearch\SearchAdapter\Aggregation\Builder" type="Algolia\AlgoliaSearch\Adapter\Aggregation\Builder"/>
     <type name="Magento\CatalogSearch\Model\ResourceModel\Fulltext\Collection">
         <plugin name="algoliasearchelastic_search_filter" type="Algolia\AlgoliaSearch\Plugin\FulltextCollection" />
