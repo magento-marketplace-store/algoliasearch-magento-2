@@ -145,19 +145,4 @@ class Price extends \Magento\CatalogSearch\Model\Layer\Filter\Price
 
         return $data;
     }
-
-    protected function _renderRangeLabel($fromPrice, $toPrice)
-    {
-        $fromPrice = empty($fromPrice) ? 0 : $fromPrice * $this->getCurrencyRate();
-        $toPrice = empty($toPrice) ? $toPrice : $toPrice * $this->getCurrencyRate();
-
-        $formattedFromPrice = $this->priceCurrency->format($fromPrice);
-        if ($toPrice === '') {
-            return __('%1 and above', $formattedFromPrice);
-        } elseif ($fromPrice == $toPrice && $this->dataProvider->getOnePriceIntervalValue()) {
-            return $formattedFromPrice;
-        }
-
-        return __('%1 - %2', $formattedFromPrice, $this->priceCurrency->format($toPrice));
-    }
 }
