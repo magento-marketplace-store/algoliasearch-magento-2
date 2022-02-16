@@ -7,12 +7,11 @@ use Algolia\AlgoliaSearch\Helper\ConfigHelper;
 use Algolia\AlgoliaSearch\Helper\Data;
 use Algolia\AlgoliaSearch\Helper\Entity\PageHelper;
 use Algolia\AlgoliaSearch\Model\Queue;
-use Magento;
 use Magento\Framework\Message\ManagerInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Symfony\Component\Console\Output\ConsoleOutput;
 
-class Page implements Magento\Framework\Indexer\ActionInterface, Magento\Framework\Mview\ActionInterface
+class Page implements \Magento\Framework\Indexer\ActionInterface, \Magento\Framework\Mview\ActionInterface
 {
     private $fullAction;
     private $storeManager;
@@ -45,10 +44,6 @@ class Page implements Magento\Framework\Indexer\ActionInterface, Magento\Framewo
 
     public function execute($ids)
     {
-    }
-
-    public function executeFull()
-    {
         if (!$this->configHelper->getApplicationID()
             || !$this->configHelper->getAPIKey()
             || !$this->configHelper->getSearchOnlyAPIKey()) {
@@ -74,17 +69,34 @@ class Page implements Magento\Framework\Indexer\ActionInterface, Magento\Framewo
             }
 
             if ($this->isPagesInAdditionalSections($storeId)) {
-                $this->queue->addToQueue($this->fullAction, 'rebuildStorePageIndex', ['store_id' => $storeId], 1);
+                $data = ['store_id' => $storeId];
+                if (is_array($ids) && count($ids) > 0) {
+                    $data['page_ids'] = $ids;
+                }
+
+                $this->queue->addToQueue(
+                    $this->fullAction,
+                    'rebuildStorePageIndex',
+                    $data,
+                    is_array($ids) ? count($ids) : 1
+                );
             }
         }
     }
 
+    public function executeFull()
+    {
+        $this->execute(null);
+    }
+
     public function executeList(array $ids)
     {
+        $this->execute($ids);
     }
 
     public function executeRow($id)
     {
+        $this->execute([$id]);
     }
 
     private function isPagesInAdditionalSections($storeId)

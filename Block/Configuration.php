@@ -243,6 +243,14 @@ class Configuration extends Algolia implements CollectionDataSourceInterface
             ],
             'analytics' => $config->getAnalyticsConfig(),
             'now' => $this->getTimestamp(),
+            'queue' => [
+                'isEnabled' => $config->isQueueActive($this->getStoreId()),
+                'nbOfJobsToRun' => $config->getNumberOfJobToRun($this->getStoreId()),
+                'retryLimit' => $config->getRetryLimit($this->getStoreId()),
+                'nbOfElementsPerIndexingJob' => $config->getNumberOfElementByPage($this->getStoreId()),
+            ],
+            'isPreventBackendRenderingEnabled' => $config->preventBackendRendering($this->getStoreId()),
+            'areOutOfStockOptionsDisplayed' => $config->indexOutOfStockOptions($this->getStoreId()),
             'translations' => [
                 'to' => __('to'),
                 'or' => __('or'),
@@ -278,13 +286,7 @@ class Configuration extends Algolia implements CollectionDataSourceInterface
 
     private function areCategoriesInFacets($facets)
     {
-        foreach ($facets as $facet) {
-            if ($facet['attribute'] === 'categories') {
-                return true;
-            }
-        }
-
-        return false;
+        return in_array('categories', array_column($facets, 'attribute'));
     }
 
     private function getUrlTrackedParameters()
@@ -328,28 +330,16 @@ class Configuration extends Algolia implements CollectionDataSourceInterface
 
     private function getLandingPageId()
     {
-        if (!$this->isLandingPage()) {
-            return '';
-        }
-
-        return $this->getCurrentLandingPage()->getId();
+        return $this->isLandingPage() ? $this->getCurrentLandingPage()->getId() : '';
     }
 
     private function getLandingPageQuery()
     {
-        if (!$this->isLandingPage()) {
-            return '';
-        }
-
-        return $this->getCurrentLandingPage()->getQuery();
+        return $this->isLandingPage() ? $this->getCurrentLandingPage()->getQuery() : '';
     }
 
     private function getLandingPageConfiguration()
     {
-        if (!$this->isLandingPage()) {
-            return json_encode([]);
-        }
-
-        return $this->getCurrentLandingPage()->getConfiguration();
+        return $this->isLandingPage() ? $this->getCurrentLandingPage()->getConfiguration() : json_encode([]);
     }
 }

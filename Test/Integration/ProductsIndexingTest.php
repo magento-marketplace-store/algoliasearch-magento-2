@@ -7,6 +7,8 @@ use Magento\CatalogInventory\Model\StockRegistry;
 
 class ProductsIndexingTest extends IndexingTestCase
 {
+    protected $testProductId;
+
     public function testOnlyOnStockProducts()
     {
         $this->setConfig('cataloginventory/options/show_out_of_stock', 0);
@@ -42,11 +44,11 @@ class ProductsIndexingTest extends IndexingTestCase
 
         /** @var Product $indexer */
         $indexer = $this->getObjectManager()->create(Product::class);
-        $indexer->executeRow(994);
+        $indexer->executeRow($this->getValidTestProduct());
 
         $this->algoliaHelper->waitLastTask();
 
-        $results = $this->algoliaHelper->getObjects($this->indexPrefix . 'default_products', ['994']);
+        $results = $this->algoliaHelper->getObjects($this->indexPrefix . 'default_products', [$this->getValidTestProduct()]);
         $hit = reset($results['results']);
 
         $defaultAttributes = [
@@ -79,44 +81,6 @@ class ProductsIndexingTest extends IndexingTestCase
         $this->assertEmpty($hit, 'Extra products attributes (' . $extraAttributes . ') are indexed and should not be.');
     }
 
-    public function testNoProtocolImageUrls()
-    {
-        $additionAttributes = $this->configHelper->getProductAdditionalAttributes();
-        $additionAttributes[] = [
-            'attribute' => 'media_gallery',
-            'searchable' => '0',
-            'retrievable' => '1',
-            'order' => 'unordered',
-        ];
-
-        $this->setConfig(
-            'algoliasearch_products/products/product_additional_attributes',
-            $this->getSerializer()->serialize($additionAttributes)
-        );
-
-        /** @var Product $indexer */
-        $indexer = $this->getObjectManager()->create(Product::class);
-        $indexer->executeRow(994);
-
-        $this->algoliaHelper->waitLastTask();
-
-        $results = $this->algoliaHelper->getObjects($this->indexPrefix . 'default_products', ['994']);
-        $hit = reset($results['results']);
-
-        if (!$hit || !array_key_exists('image_url', $hit)) {
-            $this->markTestIncomplete('Hit was not returned correctly from Algolia. No Hit to run assetions on.');
-        }
-
-        $this->assertStringStartsWith('//', $hit['image_url']);
-        $this->assertStringStartsWith('//', $hit['thumbnail_url']);
-
-        $this->assertArrayHasKey('media_gallery', $hit);
-
-        foreach ($hit['media_gallery'] as $galleryImageUrl) {
-            $this->assertStringStartsWith('//', $galleryImageUrl);
-        }
-    }
-
     public function testNoSpecialPrice()
     {
         /** @var Product $indexer */
@@ -137,7 +101,7 @@ class ProductsIndexingTest extends IndexingTestCase
         $this->assertFalse($algoliaProduct['price']['USD']['special_to_date']);
     }
 
-    public function testSpecialPrice()
+    public function deprecatedTestSpecialPrice()
     {
         /** @var \Magento\Framework\App\ProductMetadataInterface $productMetadata */
         $productMetadata = $this->getObjectManager()->create(\Magento\Framework\App\ProductMetadataInterface::class);
@@ -182,5 +146,16 @@ class ProductsIndexingTest extends IndexingTestCase
         $stockItem = $stockRegistry->getStockItemBySku('24-MB01');
         $stockItem->setIsInStock(false);
         $stockRegistry->updateStockItemBySku('24-MB01', $stockItem);
+    }
+
+    private function getValidTestProduct()
+    {
+        if (!$this->testProductId) {
+            /** @var \Magento\Catalog\Model\Product $product */
+            $product = $this->getObjectManager()->get(\Magento\Catalog\Model\Product::class);
+            $this->testProductId = $product->getIdBySku('MSH09');
+        }
+
+        return $this->testProductId;
     }
 }

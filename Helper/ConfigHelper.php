@@ -32,7 +32,6 @@ class ConfigHelper
     const SHOW_SUGGESTIONS_NO_RESULTS = 'algoliasearch_instant/instant/show_suggestions_on_no_result_page';
     const XML_ADD_TO_CART_ENABLE = 'algoliasearch_instant/instant/add_to_cart_enable';
     const INFINITE_SCROLL_ENABLE = 'algoliasearch_instant/instant/infinite_scroll_enable';
-    const BACKEND_RENDERING_ENABLE = 'algoliasearch_instant/instant/backend_rendering_enable';
 
     const IS_POPUP_ENABLED = 'algoliasearch_autocomplete/autocomplete/is_popup_enabled';
     const NB_OF_PRODUCTS_SUGGESTIONS = 'algoliasearch_autocomplete/autocomplete/nb_of_products_suggestions';
@@ -100,7 +99,6 @@ class ConfigHelper
     const SHOW_OUT_OF_STOCK = 'cataloginventory/options/show_out_of_stock';
 
     const USE_SECURE_IN_FRONTEND = 'web/secure/use_in_frontend';
-    const CATALOG_SEARCH_ENGINE = 'catalog/search/engine';
 
     const EXTRA_SETTINGS_PRODUCTS = 'algoliasearch_extra_settings/extra_settings/products_extra_settings';
     const EXTRA_SETTINGS_CATEGORIES = 'algoliasearch_extra_settings/extra_settings/categories_extra_settings';
@@ -122,7 +120,6 @@ class ConfigHelper
     private $eventManager;
     private $currencyManager;
     private $serializer;
-    private $maxRecordSize;
 
     public function __construct(
         Magento\Framework\App\Config\ScopeConfigInterface $configInterface,
@@ -365,11 +362,6 @@ class ConfigHelper
     {
         return $this->isInstantEnabled($storeId)
             && $this->configInterface->isSetFlag(self::INFINITE_SCROLL_ENABLE, ScopeInterface::SCOPE_STORE, $storeId);
-    }
-
-    public function isBackendRenderingEnabled($storeId = null)
-    {
-        return $this->configInterface->isSetFlag(self::BACKEND_RENDERING_ENABLE, ScopeInterface::SCOPE_STORE, $storeId);
     }
 
     public function isRemoveBranding($storeId = null)
@@ -896,6 +888,8 @@ class ConfigHelper
             'in_stock',
             'type_id',
             'value',
+            'query', # suggestions
+            'path', # categories
         ]);
 
         $currencies = $this->dirCurrency->getConfigAllowCurrencies();
@@ -903,11 +897,13 @@ class ConfigHelper
         foreach ($currencies as $currency) {
             $attributes[] = 'price.' . $currency . '.default';
             $attributes[] = 'price.' . $currency . '.default_tier';
+            $attributes[] = 'price.' . $currency . '.default_max';
             $attributes[] = 'price.' . $currency . '.default_formated';
             $attributes[] = 'price.' . $currency . '.default_original_formated';
             $attributes[] = 'price.' . $currency . '.default_tier_formated';
             $attributes[] = 'price.' . $currency . '.group_' . $groupId;
             $attributes[] = 'price.' . $currency . '.group_' . $groupId . '_tier';
+            $attributes[] = 'price.' . $currency . '.group_' . $groupId . '_max';
             $attributes[] = 'price.' . $currency . '.group_' . $groupId . '_formated';
             $attributes[] = 'price.' . $currency . '.group_' . $groupId . '_tier_formated';
             $attributes[] = 'price.' . $currency . '.group_' . $groupId . '_original_formated';
@@ -1103,29 +1099,7 @@ class ConfigHelper
 
     public function getMaxRecordSizeLimit($storeId = null)
     {
-        if ($this->maxRecordSize) {
-            return $this->maxRecordSize;
-        }
-
-        $configValue = $this->configInterface->getValue(self::MAX_RECORD_SIZE_LIMIT, ScopeInterface::SCOPE_STORE, $storeId);
-        if ($configValue) {
-            $this->maxRecordSize = $configValue;
-
-            return $this->maxRecordSize;
-        }
-        /** @var \Algolia\AlgoliaSearch\Helper\ProxyHelper $proxyHelper */
-        $proxyHelper = $this->objectManager->create('Algolia\AlgoliaSearch\Helper\ProxyHelper');
-        $clientData = $proxyHelper->getClientConfigurationData();
-        if ($clientData && isset($clientData['max_record_size'])) {
-            /** @var \Magento\Framework\App\Config\Storage\Writer $configWriter */
-            $configWriter = $this->objectManager->create('Magento\Framework\App\Config\Storage\Writer');
-            $configWriter->save(self::MAX_RECORD_SIZE_LIMIT, $clientData['max_record_size']);
-            $this->maxRecordSize = $clientData['max_record_size'];
-        } else {
-            $this->maxRecordSize = self::getDefaultMaxRecordSize();
-        }
-
-        return $this->maxRecordSize;
+        return self::getDefaultMaxRecordSize();
     }
 
     public function getArchiveLogClearLimit($storeId = null)
@@ -1135,10 +1109,5 @@ class ConfigHelper
             ScopeInterface::SCOPE_STORE,
             $storeId
         );
-    }
-
-    public function getCatalogSearchEngine($storeId = null)
-    {
-        return $this->configInterface->getValue(self::CATALOG_SEARCH_ENGINE, ScopeInterface::SCOPE_STORE, $storeId);
     }
 }

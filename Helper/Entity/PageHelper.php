@@ -8,7 +8,7 @@ use Magento\Cms\Model\ResourceModel\Page\CollectionFactory as PageCollectionFact
 use Magento\Cms\Model\Template\FilterProvider;
 use Magento\Framework\DataObject;
 use Magento\Framework\Event\ManagerInterface;
-use Magento\Framework\UrlInterface;
+use Magento\Framework\UrlFactory;
 use Magento\Store\Model\StoreManagerInterface;
 
 class PageHelper
@@ -39,19 +39,19 @@ class PageHelper
     private $storeManager;
 
     /**
-     * @var UrlInterface
+     * @var UrlFactory
      */
-    private $frontendUrlBuilder;
+    private $frontendUrlFactory;
 
     /**
      * PageHelper constructor.
      *
-     * @param ManagerInterface $eventManager
+     * @param ManagerInterface      $eventManager
      * @param PageCollectionFactory $pageCollectionFactory
-     * @param ConfigHelper $configHelper
-     * @param FilterProvider $filterProvider
+     * @param ConfigHelper          $configHelper
+     * @param FilterProvider        $filterProvider
      * @param StoreManagerInterface $storeManager
-     * @param UrlInterface $frontendUrlBuilder
+     * @param UrlFactory          $frontendUrlFactory
      */
     public function __construct(
         ManagerInterface $eventManager,
@@ -59,14 +59,14 @@ class PageHelper
         ConfigHelper $configHelper,
         FilterProvider $filterProvider,
         StoreManagerInterface $storeManager,
-        UrlInterface $frontendUrlBuilder
+        UrlFactory $frontendUrlFactory
     ) {
         $this->eventManager = $eventManager;
         $this->pageCollectionFactory = $pageCollectionFactory;
         $this->configHelper = $configHelper;
         $this->filterProvider = $filterProvider;
         $this->storeManager = $storeManager;
-        $this->frontendUrlBuilder = $frontendUrlBuilder;
+        $this->frontendUrlFactory = $frontendUrlFactory;
     }
 
     public function getIndexNameSuffix()
@@ -91,27 +91,30 @@ class PageHelper
         return $indexSettings;
     }
 
-    public function getPages($storeId)
+    public function getPages($storeId, array $pageIds = null)
     {
         /** @var \Magento\Cms\Model\ResourceModel\Page\Collection $magentoPages */
         $magentoPages = $this->pageCollectionFactory->create()
             ->addStoreFilter($storeId)
             ->addFieldToFilter('is_active', 1);
 
-        $excludedPages = array_values($this->configHelper->getExcludedPages());
-
-        foreach ($excludedPages as &$excludedPage) {
-            $excludedPage = $excludedPage['attribute'];
+        if ($pageIds && count($pageIds)) {
+            $magentoPages->addFieldToFilter('page_id', ['in' => $pageIds]);
         }
+
+        $excludedPages = $this->getExcludedPageIds();
+        if (count($excludedPages)) {
+            $magentoPages->addFieldToFilter('identifier', ['nin' => $excludedPages]);
+        }
+
+        $pageIdsToRemove = $pageIds ? array_flip($pageIds) : [];
 
         $pages = [];
 
+        $frontendUrlBuilder = $this->frontendUrlFactory->create()->setScope($storeId);
+
         /** @var Page $page */
         foreach ($magentoPages as $page) {
-            if (in_array($page->getIdentifier(), $excludedPages)) {
-                continue;
-            }
-
             $pageObject = [];
 
             $pageObject['slug'] = $page->getIdentifier();
@@ -129,14 +132,13 @@ class PageHelper
             }
 
             $pageObject['objectID'] = $page->getId();
-            $pageObject['url'] = $this->frontendUrlBuilder->setStore($storeId)
-                                      ->getUrl(
-                                          null,
-                                          [
-                                              '_direct' => $page->getIdentifier(),
-                                              '_secure' => $this->configHelper->useSecureUrlsInFrontend($storeId),
-                                          ]
-                                      );
+            $pageObject['url'] = $frontendUrlBuilder->getUrl(
+                null,
+                [
+                    '_direct' => $page->getIdentifier(),
+                    '_secure' => $this->configHelper->useSecureUrlsInFrontend($storeId),
+                ]
+            );
             $pageObject['content'] = $this->strip($content, ['script', 'style']);
 
             $transport = new DataObject($pageObject);
@@ -146,10 +148,25 @@ class PageHelper
             );
             $pageObject = $transport->getData();
 
-            $pages[] = $pageObject;
+            if (isset($pageIdsToRemove[$page->getId()])) {
+                unset($pageIdsToRemove[$page->getId()]);
+            }
+            $pages['toIndex'][] = $pageObject;
         }
 
+        $pages['toRemove'] = array_unique(array_keys($pageIdsToRemove));
+
         return $pages;
+    }
+
+    public function getExcludedPageIds()
+    {
+        $excludedPages = array_values($this->configHelper->getExcludedPages());
+        foreach ($excludedPages as &$excludedPage) {
+            $excludedPage = $excludedPage['attribute'];
+        }
+
+        return $excludedPages;
     }
 
     public function getStores($storeId = null)

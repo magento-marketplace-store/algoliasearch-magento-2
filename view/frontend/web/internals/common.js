@@ -7,7 +7,8 @@ var algolia = {
 		'beforeWidgetInitialization',
 		'beforeInstantsearchStart',
 		'afterInstantsearchStart',
-		'afterInsightsBindEvents'
+		'afterInsightsBindEvents',
+		'beforeAutocompleteProductSourceOptions'
 	],
 	registeredHooks: [],
 	registerHook: function (hookName, callback) {
@@ -97,7 +98,7 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 				var colors = [];
 
 				$.each(hit._highlightResult.color, function (i, color) {
-					if (color.matchLevel === 'none') {
+					if (color.matchLevel === undefined || color.matchLevel === 'none') {
 						return;
 					}
 
@@ -105,7 +106,6 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 
 					if (algoliaConfig.useAdaptiveImage === true) {
 						var matchedColor = color.matchedWords.join(' ');
-
 						if (hit.images_data && color.fullyHighlighted && color.fullyHighlighted === true) {
 							matchedColors.push(matchedColor);
 						}
@@ -215,6 +215,8 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 				options.numericFilters = 'visibility_search=1';
 				options.ruleContexts = ['magento_filters', '']; // Empty context to keep BC for already create rules in dashboard
 
+				options = algolia.triggerHooks('beforeAutocompleteProductSourceOptions', options);
+
 				source =  {
 					source: $.fn.autocomplete.sources.hits(algolia_client.initIndex(algoliaConfig.indexName + "_" + section.name), options),
 					name: section.name,
@@ -289,6 +291,7 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 
 							hit.displayKey = hit.displayKey || hit.name;
 
+							hit.__indexName = algoliaConfig.indexName + "_" + section.name;
 							hit.__queryID = payload.queryID;
 							hit.__position = payload.hits.indexOf(hit) + 1;
 
@@ -333,6 +336,7 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 							var toEscape = hit._highlightResult.query.value;
 							hit._highlightResult.query.value = algoliaBundle.autocomplete.escapeHighlightedString(toEscape);
 
+							hit.__indexName = algoliaConfig.indexName + "_" + section.name;
 							hit.__queryID = payload.queryID;
 							hit.__position = payload.hits.indexOf(hit) + 1;
 
@@ -352,6 +356,7 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 						suggestion: function (hit, payload) {
 							hit.url = algoliaConfig.baseUrl + '/catalogsearch/result/?q=' + hit.value + '&refinement_key=' + encodeURIComponent(section.name);
 
+							hit.__indexName = algoliaConfig.indexName + "_section_" + section.name;
 							hit.__queryID = payload.queryID;
 							hit.__position = payload.hits.indexOf(hit) + 1;
 
@@ -566,7 +571,7 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 									uiStateProductIndex.hierarchicalMenu[currentFacet.attribute+ '.level0'].join('~'));
 							}
 							// Handle sliders
-							if (currentFacet.type == 'slider') {
+							if (currentFacet.type == 'slider' || currentFacet.type == 'priceRanges') {
 								routeParameters[currentFacet.attribute] = (uiStateProductIndex.range &&
 									uiStateProductIndex.range[currentFacet.attribute] &&
 									uiStateProductIndex.range[currentFacet.attribute]);
@@ -618,21 +623,25 @@ requirejs(['algoliaBundle'], function(algoliaBundle) {
 								uiStateProductIndex['hierarchicalMenu']['categories.level0'] = [algoliaConfig.request.path];
 							}
 							// Handle sliders
-							if (currentFacet.type == 'slider') {
-								uiStateProductIndex['range'][currentFacet.attribute] = routeParameters[currentFacet.attribute] && routeParameters[currentFacet.attribute];
+							if (currentFacet.type == 'slider' || currentFacet.type == 'priceRanges') {
+								var currentFacetAttribute = currentFacet.attribute;
+								if (currentFacetAttribute.indexOf("price") !== -1) {
+									currentFacetAttribute += algoliaConfig.priceKey;
+								}
+								uiStateProductIndex['range'][currentFacetAttribute] = routeParameters[currentFacetAttribute] && routeParameters[currentFacetAttribute];
 								if (algoliaConfig.isLandingPage &&
-									typeof uiStateProductIndex['range'][currentFacet.attribute] === 'undefined' &&
-									currentFacet.attribute in landingPageConfig) {
+									typeof uiStateProductIndex['range'][currentFacetAttribute] === 'undefined' &&
+									currentFacetAttribute in landingPageConfig) {
 
 									var facetValue = '';
-									if (typeof landingPageConfig[currentFacet.attribute]['>='] !== "undefined") {
-										facetValue = landingPageConfig[currentFacet.attribute]['>='][0];
+									if (typeof landingPageConfig[currentFacetAttribute]['>='] !== "undefined") {
+										facetValue = landingPageConfig[currentFacetAttribute]['>='][0];
 									}
 									facetValue += ':';
-									if (typeof landingPageConfig[currentFacet.attribute]['<='] !== "undefined") {
-										facetValue += landingPageConfig[currentFacet.attribute]['<='][0];
+									if (typeof landingPageConfig[currentFacetAttribute]['<='] !== "undefined") {
+										facetValue += landingPageConfig[currentFacetAttribute]['<='][0];
 									}
-									uiStateProductIndex['range'][currentFacet.attribute] = facetValue;
+									uiStateProductIndex['range'][currentFacetAttribute] = facetValue;
 								}
 							}
 						};

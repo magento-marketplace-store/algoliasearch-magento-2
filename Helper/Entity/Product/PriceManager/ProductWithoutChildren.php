@@ -62,6 +62,8 @@ abstract class ProductWithoutChildren
         foreach ($fields as $field => $withTax) {
             $this->customData[$field] = [];
 
+            $product->setPriceCalculation(true);
+
             foreach ($currencies as $currencyCode) {
                 $this->customData[$field][$currencyCode] = [];
 
@@ -130,7 +132,7 @@ abstract class ProductWithoutChildren
         return $this->priceCurrency->convert($amount, $this->store, $currencyCode);
     }
 
-    protected function getTaxPrice($product, $amount, $withTax)
+    public function getTaxPrice($product, $amount, $withTax)
     {
         return (float) $this->catalogHelper->getTaxPrice(
             $product,

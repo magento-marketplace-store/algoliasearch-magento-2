@@ -23,9 +23,6 @@ class AnalyticsHelper
     /** @var IndexEntityDataProvider */
     private $entityHelper;
 
-    /** @var ProxyHelper */
-    private $proxyHelper;
-
     /** @var Logger */
     private $logger;
 
@@ -54,26 +51,33 @@ class AnalyticsHelper
     private $analyticsConfig;
 
     /**
+     * Can be changed through DI
+     *
+     * @var string
+     */
+    private $region;
+
+    /**
      * @param AlgoliaHelper $algoliaHelper
      * @param ConfigHelper $configHelper
      * @param IndexEntityDataProvider $entityHelper
-     * @param ProxyHelper $proxyHelper
      * @param Logger $logger
+     * @param string $region
      */
     public function __construct(
         AlgoliaHelper $algoliaHelper,
         ConfigHelper $configHelper,
         IndexEntityDataProvider $entityHelper,
-        ProxyHelper $proxyHelper,
-        Logger $logger
+        Logger $logger,
+        string $region = 'us'
     ) {
         $this->algoliaHelper = $algoliaHelper;
         $this->configHelper = $configHelper;
 
         $this->entityHelper = $entityHelper;
-        $this->proxyHelper = $proxyHelper;
 
         $this->logger = $logger;
+        $this->region = $region;
     }
 
     private function setupAnalyticsClient()
@@ -84,12 +88,14 @@ class AnalyticsHelper
 
         $this->analyticsClient = AnalyticsClient::create(
             $this->configHelper->getApplicationID(),
-            $this->configHelper->getAPIKey()
+            $this->configHelper->getAPIKey(),
+            $this->region
         );
 
         $this->analyticsConfig = AnalyticsConfig::create(
             $this->configHelper->getApplicationID(),
-            $this->configHelper->getAPIKey()
+            $this->configHelper->getAPIKey(),
+            $this->region
         );
     }
 
@@ -305,25 +311,9 @@ class AnalyticsHelper
         return $conversion && isset($conversion['dates']) ? $conversion['dates'] : [];
     }
 
-    /**
-     * Client Data Check
-     *
-     * @return mixed
-     */
-    public function getClientData()
-    {
-        if (!$this->clientData) {
-            $this->clientData = $this->proxyHelper->getInfo(ProxyHelper::INFO_TYPE_ANALYTICS);
-        }
-
-        return $this->clientData;
-    }
-
     public function isAnalyticsApiEnabled()
     {
-        $clientData = $this->getClientData();
-
-        return (bool) $clientData && isset($clientData['analytics_api']) ? $clientData['analytics_api'] : 0;
+        return true;
     }
 
     public function isClickAnalyticsEnabled()
@@ -332,9 +322,7 @@ class AnalyticsHelper
             return false;
         }
 
-        $clientData = $this->getClientData();
-
-        return (bool) $clientData && isset($clientData['click_analytics']) ? $clientData['click_analytics'] : 0;
+        return true;
     }
 
     /**
