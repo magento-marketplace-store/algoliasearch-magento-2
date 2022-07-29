@@ -83,9 +83,9 @@ abstract class ProductWithoutChildren
                 }
 
                 $this->customData[$field][$currencyCode]['special_from_date'] =
-                    strtotime($product->getSpecialFromDate());
+                    !is_null($product->getSpecialFromDate()) ? strtotime($product->getSpecialFromDate()) : time();
                 $this->customData[$field][$currencyCode]['special_to_date'] =
-                    strtotime($product->getSpecialToDate());
+                    !is_null($product->getSpecialToDate()) ?  strtotime($product->getSpecialToDate()) : time();
 
                 $this->addSpecialPrices($specialPrice, $field, $currencyCode);
                 $this->addTierPrices($tierPrice, $field, $currencyCode);

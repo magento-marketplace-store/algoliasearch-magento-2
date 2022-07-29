@@ -748,8 +748,10 @@ class ConfigHelper
         $constant = 'EXTRA_SETTINGS_' . mb_strtoupper($section);
 
         $value = $this->configInterface->getValue(constant('self::' . $constant), ScopeInterface::SCOPE_STORE, $storeId);
-
-        return trim($value);
+        if(!empty($value)) {
+            return trim($value);
+        }
+        return $value;
     }
 
     public function preventBackendRendering($storeId = null)

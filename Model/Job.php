@@ -80,6 +80,19 @@ class Job extends \Magento\Framework\Model\AbstractModel implements IdentityInte
 
         $this->setRetries((int) $this->getRetries() + 1);
 
+        if (array_key_exists("store_id", $data)) {
+            $data['storeId'] = $data['store_id'];
+            unset($data['store_id']);
+        }
+        if (array_key_exists("product_ids", $data)) {
+            $data['productIds'] = $data['product_ids'];
+            unset($data['product_ids']);
+        }
+        if (array_key_exists("page_size", $data)) {
+            $data['pageSize'] = $data['page_size'];
+            unset($data['page_size']);
+        }
+
         call_user_func_array([$model, $method], $data);
 
         $this->getResource()->save($this);
