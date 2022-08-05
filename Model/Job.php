@@ -92,6 +92,10 @@ class Job extends \Magento\Framework\Model\AbstractModel implements IdentityInte
             $data['pageSize'] = $data['page_size'];
             unset($data['page_size']);
         }
+        if (array_key_exists("category_ids", $data)) {
+            $data['categoryIds'] = $data['category_ids'];
+            unset($data['category_ids']);
+        }
 
         call_user_func_array([$model, $method], $data);
 
