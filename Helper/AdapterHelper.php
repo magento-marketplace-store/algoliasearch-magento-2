@@ -55,7 +55,8 @@ class AdapterHelper
         $targetedIndex = null;
         if ($this->isReplaceCategory() || $this->isSearch() || $this->isLandingPage()) {
             $searchParams = $this->getSearchParams($storeId);
-
+            $searchParams['page'] = (int) $searchParams['page'] < 1 ? 1 : $searchParams['page'];
+            
             // This is the first load of a landing page, so we have to get the parameters from the entity
             if ($this->isLandingPage() && $this->filtersHelper->getRawQueryParameter() === null) {
                 $searchParams = array_merge(
