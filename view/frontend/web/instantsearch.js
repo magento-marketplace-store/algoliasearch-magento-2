@@ -159,7 +159,9 @@ requirejs(['algoliaBundle','Magento_Catalog/js/price-utils'], function(algoliaBu
 					},
 					init: function (data) {
 						var page = parseInt(data.helper.state.page);
-						page = page < 1 ? 1 : page;
+						if (page < 0) {
+						    page = 0;
+						}
 						
 						if (algoliaConfig.request.refinementKey.length > 0) {
 							data.helper.toggleRefine(algoliaConfig.request.refinementKey, algoliaConfig.request.refinementValue);
