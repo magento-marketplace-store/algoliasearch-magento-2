@@ -11,9 +11,9 @@ use Magento\Elasticsearch\SearchAdapter\QueryContainerFactory;
 use Magento\Elasticsearch\SearchAdapter\ResponseFactory;
 use Magento\Framework\Search\AdapterInterface;
 use Magento\Framework\Search\RequestInterface;
-use Magento\Elasticsearch7\SearchAdapter\Adapter as NativeAdapter;
+use Magento\Elasticsearch8\SearchAdapter\Adapter as NativeAdapter;
 use Magento\Framework\Search\Response\QueryResponse;
-use Magento\Elasticsearch7\SearchAdapter\Mapper;
+use Magento\Elasticsearch8\SearchAdapter\Mapper;
 use Psr\Log\LoggerInterface;
 
 /**
